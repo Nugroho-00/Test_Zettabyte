@@ -5,10 +5,20 @@
  * Expected Result:
  * fl
  */
-const words = ['flower', 'flow', 'flight'];
+const words = ["flower", "flow", "flight"];
 
 function result(words) {
-  // Your Code Here
+  if (words.length) return "";
+
+  let setPrefix = words[0];
+
+  for (let i = 1; i < words.length; i++) {
+    while (words[i].indexOf(setPrefix) !== 0) {
+      setPrefix = setPrefix.slice(0, -1);
+      if (!setPrefix) return "";
+    }
+  }
+  return setPrefix;
 }
 
 console.log(result(words));

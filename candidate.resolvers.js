@@ -1,3 +1,11 @@
+const {
+  serializeCandidateInput,
+  validateIbanData,
+  validateIbanForParents,
+  validateIbanForStudent,
+  validateIbanForPaymentSupport
+} = require('./candidate.helpers')
+
 async function UpdateCandidate(
   parent,
   {
@@ -24,99 +32,27 @@ async function UpdateCandidate(
   // *************** find candidate first before update
   const candidateBeforeUpdate = await CandidateModel.findById(_id).select('iban payment_supports parents').lean();
 
-  if (candidate_input.school) {
-    candidate_input.school = String(candidate_input.school).toUpperCase();
-  }
-  if (candidate_input.campus) {
-    candidate_input.campus = String(candidate_input.campus).toUpperCase();
-  }
+  // REFACTOR START : Serialize candidate data
+ candidate_input = serializeCandidateInput(candidate_input)
+  // REFACTOR END : Serialize candidate data
 
-  if (candidate_input.civility) {
-    if (candidate_input.civility === 'neutral') {
-      candidate_input.sex = 'N';
-    } else {
-      candidate_input.sex = candidate_input.civility === 'MR' ? 'M' : 'F';
-    }
-  }
-
-  if (candidate_input.parents && candidate_input.parents.length) {
-    for (let parent of candidate_input.parents) {
-      if (parent.iban && parent.bic && parent.account_holder_name) {
-        const ibanHistory = await IbanHistoryModel.create({
-          candidate_id: _id,
-          iban: parent.iban,
-          bic: parent.bic,
-          account_holder_name: parent.account_holder_name,
-          financial_support_first_name: parent.name,
-          financial_support_last_name: parent.family_name,
-        });
-
-        try {
-          await CandidateUtility.validateIbanBicCandidate(parent.iban, parent.bic);
-          await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: 'success' } });
-        } catch (error) {
-          await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: error } });
-
-          throw new ApolloError(error);
-        }
-      }
-    }
-  }
+  // REFACTOR START : IBAN Validation
+  // REFACTOR START : IBAN Validation Parent
+ await validateIbanForParents(candidate_input.parents, _id);
+  // REFACTOR END : IBAN Validation Parent
 
   if (candidate_input.tag_ids === null) {
     candidate_input.tag_ids = [];
   }
 
+  // REFACTOR START : IBAN Validation Student
   // validate iban & bic candidate
-  if (candidate_input.iban && candidate_input.bic && candidate_input.account_holder_name) {
-    const ibanHistory = await IbanHistoryModel.create({
-      candidate_id: _id,
-      iban: candidate_input.iban,
-      bic: candidate_input.bic,
-      account_holder_name: candidate_input.account_holder_name,
-    });
+await validateIbanForStudent(candidate_input, _id)
+  // REFACTOR END : IBAN Validation Student
 
-    try {
-      // *************** check iban input is valid
-      await CandidateUtility.validateIbanBicCandidate(candidate_input.iban, candidate_input.bic);
-
-      // *************** udpate the iban history with massage is success
-      await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: 'success' } });
-    } catch (error) {
-      // *************** udpate the iban history with massage is error
-      await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: error } });
-
-      throw new ApolloError(error);
-    }
-  }
-
-  if (candidate_input.payment_supports && candidate_input.payment_supports.length) {
-    for (let payment_support of candidate_input.payment_supports) {
-      if (payment_support.iban && payment_support.bic && payment_support.account_holder_name) {
-        const ibanHistory = await IbanHistoryModel.create({
-          candidate_id: _id,
-          iban: payment_support.iban,
-          bic: payment_support.bic,
-          account_holder_name: payment_support.account_holder_name,
-          financial_support_first_name: payment_support.name,
-          financial_support_last_name: payment_support.family_name,
-        });
-
-        try {
-          // *************** check iban input is valid
-          await CandidateUtility.validateIbanBicCandidate(payment_support.iban, payment_support.bic);
-
-          // *************** udpate the iban history with massage is success
-          await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: 'success' } });
-        } catch (error) {
-          // *************** udpate the iban history with massage is error
-          await IbanHistoryModel.updateOne({ _id: ibanHistory._id }, { $set: { message: error } });
-
-          throw new ApolloError(error);
-        }
-      }
-    }
-  }
+  // REFACTOR START : IBAN Validation Payment Support
+await validateIbanForPaymentSupport(candidate_input.payment_support, _id)
+ // REFACTOR END : IBAN Validation Payment Support
 
   // *************** if data candidate before update is exist
   if (candidateBeforeUpdate) {
@@ -198,6 +134,7 @@ async function UpdateCandidate(
       }
     }
   }
+// REFACTOR END : IBAN Validation 
 
   const nowTime = moment.utc();
   const oldCandidate = await CandidateModel.findById(_id);
